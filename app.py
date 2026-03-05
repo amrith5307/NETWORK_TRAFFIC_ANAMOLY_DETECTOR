@@ -2,85 +2,66 @@ import streamlit as st
 import pandas as pd
 import os
 import time
-import shutil
 
-# 1. Page Config
-st.set_page_config(page_title="Network Shield AI", layout="wide")
+st.set_page_config(page_title="Network Shield AI", layout="wide", page_icon="🛡️")
 
-# --- SESSION STATE INITIALIZATION ---
 if 'run_completed' not in st.session_state:
     st.session_state['run_completed'] = False
 
-st.title("🛡️ Network Anomaly Detection Dashboard")
-st.markdown("---")
+st.title("🛡️ Network Shield AI")
+st.markdown("### *Weighted Ensemble Defense System*")
 
 # --- SIDEBAR ---
-st.sidebar.header("Control Center")
-
-if st.sidebar.button("🚀 Execute Detection Pipeline"):
-    # Reset state before running
+st.sidebar.header("🕹️ Control Center")
+if st.sidebar.button("🚀 Run Detection Pipeline"):
     st.session_state['run_completed'] = False
-    
-    import main
-    with st.spinner('🧠 AI Models are analyzing traffic patterns...'):
+    import main 
+    with st.spinner('AI is analyzing traffic patterns...'):
         try:
             main.main()
-            # Give the computer a moment to finish saving the files
-            time.sleep(2) 
-            
-            # Double check the file actually exists before switching pages
-            if os.path.exists("results/latest_results.csv"):
-                st.session_state['run_completed'] = True
-                st.sidebar.success("Analysis Complete!")
-                st.rerun()
-            else:
-                st.error("Results file not found. Check if main.py is saving correctly.")
+            time.sleep(2) # Stability pause
+            st.session_state['run_completed'] = True
+            st.sidebar.success("Analysis Complete!")
+            st.rerun()
         except Exception as e:
-            st.error(f"An error occurred during execution: {e}")
+            st.error(f"Error: {e}")
 
-# --- MAIN DASHBOARD LOGIC ---
-results_path = "results/latest_results.csv"
-
-# We check BOTH the session state and the physical file
+# --- DASHBOARD ---
+results_path = os.path.join("results", "latest_results.csv")
 if st.session_state['run_completed'] and os.path.exists(results_path):
-    
-    # Load data
     res_df = pd.read_csv(results_path)
     
-    # Create Tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["🎯 Accuracy", "🏆 Verdict", "📊 Metrics", "📍 Visuals"])
+    # ACCURACY METRICS ROW
+    cols = st.columns(4)
+    for i, row in res_df.iterrows():
+        with cols[i]:
+            st.metric(label=f"⭐ {row['MODEL']}", value=f"{row['ACCURACY']*100:.1f}%", delta=f"F1: {row['F1-SCORE']:.2f}")
+
+    tab1, tab2, tab3 = st.tabs(["🏆 Verdict", "📈 Full Data", "📍 Visuals"])
 
     with tab1:
-        st.subheader("Model Confidence")
-        cols = st.columns(4)
-        for i, row in res_df.iterrows():
-            with cols[i]:
-                acc = float(row['ACCURACY'])
-                st.markdown(f"### {row['MODEL']}")
-                st.metric(label="Accuracy", value=f"{acc*100:.1f}%")
-                st.progress(acc)
+        ensemble_row = res_df[res_df['MODEL'] == 'ENSEMBLE'].iloc[0]
+        st.success(f"### System Verdict: {ensemble_row['ACCURACY']*100:.1f}% Accuracy")
+        st.info("The system has concluded its analysis of 30,000 traffic packets using weighted unsupervised voting.")
 
     with tab2:
-        ensemble = res_df.iloc[-1]
-        st.header(f"System Verdict: {float(ensemble['ACCURACY'])*100:.2f}% Confidence")
-        st.success("✅ The network is currently being monitored and secured by the Ensemble AI.")
+        st.table(res_df) 
 
     with tab3:
-        st.subheader("Detailed Performance Data")
-        st.table(res_df)
-
-    with tab4:
         st.subheader("Visual Analysis")
-        g1, g2 = st.columns(2)
-        metrics_plot = "results/plots/final_metrics_comparison.png"
-        pca_plot = "results/plots/traffic_clusters_pca.png"
+        # Check for Comparison Plot
+        comp_path = os.path.join("results", "plots", "final_metrics_comparison.png")
+        if os.path.exists(comp_path):
+            st.image(comp_path)
         
-        if os.path.exists(metrics_plot):
-            with g1: st.image(metrics_plot)
-        if os.path.exists(pca_plot):
-            with g2: st.image(pca_plot)
-
+        st.markdown("---")
+        
+        # Check for Confusion Matrix
+        cm_path = os.path.join("results", "plots", "ENSEMBLE_cm.png")
+        if os.path.exists(cm_path):
+            st.markdown("#### 🎯 Ensemble Confusion Matrix")
+            st.image(cm_path, width=700)
+        else:
+            st.warning("Visuals are still being finalized. Please wait 5 seconds and refresh.")
 else:
-    # --- CLEAN WELCOME VIEW ---
-    st.subheader("Welcome to the Network Security Analysis Interface.")
-    st.write("The system is currently idle. Please initiate the detection pipeline from the sidebar to begin monitoring.")
+    st.info("System Idle. Press 'Run' in the sidebar to begin monitoring.")
