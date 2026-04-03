@@ -66,15 +66,16 @@ if st.session_state['run_completed'] and os.path.exists(results_path):
             st.image(comp_path, caption="Model Performance Comparison")
 
     with tab4:
-        st.subheader("🔍 SHAP Explanation")
-        # CRITICAL FIX: Filename must match what explainer.py saves
-        shap_path = os.path.join("results", "plots", "shap_summary.png")
+        st.subheader("🔍 SHAP Global Explanation")
+        st.image(os.path.join("results", "plots", "shap_summary.png"))
         
-        if os.path.exists(shap_path): 
-            st.image(shap_path, caption="Feature Importance (Mapped from PCA)")
-            st.write("This plot shows which original network features had the most influence on the decision.")
-        else: 
-            st.warning("SHAP plot not found. Ensure 'run_shap_analysis()' is generating 'shap_summary.png' in results/plots/.")
+        st.divider()
+        
+        st.subheader("📍 Case Study: Individual Packet Analysis")
+        waterfall_path = os.path.join("results", "plots", "shap_waterfall.png")
+        if os.path.exists(waterfall_path):
+            st.image(waterfall_path)
+            st.info("This Waterfall plot shows exactly how the model decided on one specific packet.")
 
     # --- TAB 5: GEMINI CHATBOT ---
     with tab5:
