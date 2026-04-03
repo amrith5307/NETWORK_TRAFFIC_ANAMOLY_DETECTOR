@@ -32,7 +32,7 @@ if st.session_state['run_completed'] and os.path.exists(results_path):
     res_df = pd.read_csv(results_path)
     
     # ACCURACY METRICS ROW
-    cols = st.columns(4)
+    cols = st.columns(3)
     for i, row in res_df.iterrows():
         with cols[i]:
             st.metric(label=f"⭐ {row['MODEL']}", value=f"{row['ACCURACY']*100:.1f}%", delta=f"F1: {row['F1-SCORE']:.2f}")

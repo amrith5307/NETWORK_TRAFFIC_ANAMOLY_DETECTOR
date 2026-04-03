@@ -3,78 +3,90 @@ import numpy as np
 import os
 import shutil
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.model_selection import train_test_split
 
 # Local imports
 from src.data_loader import load_data
 from src.preprocessing import preprocess_data
-from src.isolation_forest_model import IsolationForestModel 
-from src.unsupervised_pro import HBOSDetector, EnvelopeDetector 
+from src.isolation_forest_model import IsolationForestModel
+from src.unsupervised_pro import EnvelopeDetector
 from src.fusion import AnomalyFuser
 from src.visualization import plot_final_comparison, plot_confusion_matrix
 
 def main():
-    # 1. ROBUST FOLDER SETUP
     base_dir = "results"
     plots_dir = os.path.join(base_dir, "plots")
-    
-    # Clean up old results carefully
+
     if os.path.exists(base_dir):
         shutil.rmtree(base_dir, ignore_errors=True)
-    
     os.makedirs(plots_dir, exist_ok=True)
 
-    # 2. LOAD DATA
+    # LOAD DATA
     train_path = r"D:\network_traffic_anomaly_detector\data\raw\nsl_kdd_train.csv"
-    test_path = r"D:\network_traffic_anomaly_detector\data\raw\nsl_kdd_test.csv"
-    
+    test_path  = r"D:\network_traffic_anomaly_detector\data\raw\nsl_kdd_test.csv"
+
     print("Loading data...")
     train_raw = load_data(train_path)
-    test_raw = load_data(test_path)
+    test_raw  = load_data(test_path)
 
-    # 3. PREPROCESS
+    # PREPROCESS
     X_train, y_train, encoders = preprocess_data(train_raw, is_train=True)
-    X_test, y_test = preprocess_data(test_raw, is_train=False, encoder_dict=encoders)
+    X_test,  y_test             = preprocess_data(test_raw, is_train=False, encoder_dict=encoders)
 
-    # 4. STABLE SAMPLING (30k rows)
-    sample_size = 30000
-    idx = np.random.choice(len(X_train), min(len(X_train), sample_size), replace=False)
-    X_train_sample = X_train[idx]
+    contamination = 0.46
 
-    # 5. RUN MODELS (Weighted Logic)
-    iso_model = IsolationForestModel(n_estimators=100, contamination=0.40)
-    iso_model.train(X_train_sample)
+    # TRAIN MODELS
+    iso_model = IsolationForestModel(n_estimators=200, contamination=contamination)
+    iso_model.train(X_train)
     iso_pred = iso_model.evaluate(X_test, y_test)
 
-    hbos_model = HBOSDetector(contamination=0.40)
-    hbos_model.train(X_train_sample)
-    hbos_pred = hbos_model.predict(X_test)
-
-    env_model = EnvelopeDetector(contamination=0.40)
-    env_model.train(X_train_sample)
+    env_model = EnvelopeDetector(contamination=contamination)
+    env_model.train(X_train)
     env_pred = env_model.predict(X_test)
 
-    # 6. WEIGHTED FUSION
-    fuser = AnomalyFuser([iso_pred, hbos_pred, env_pred])
-    final_pred = fuser.weighted_vote() 
+    # CHANGED: weighted score-based ensemble with auto threshold tuning
+    # Split test set — half to tune threshold, half to evaluate fairly
+    X_val, X_eval, y_val, y_eval = train_test_split(
+        X_test, y_test, test_size=0.5, random_state=42, stratify=y_test
+    )
 
-    # 7. EXPORT RESULTS
-    models = [("IsoForest", iso_pred), ("HBOS", hbos_pred), ("Envelope", env_pred), ("ENSEMBLE", final_pred)]
+    fuser = AnomalyFuser(iso_model, env_model, iso_weight=0.4, env_weight=0.6)
+    print("\nTuning ensemble threshold...")
+    fuser.tune_threshold(X_val, y_val)
+
+    # Get ensemble predictions on the evaluation half
+    final_pred_eval = fuser.predict(X_eval)
+
+    # Also get individual model preds on same eval split for fair comparison
+    iso_pred_eval = iso_model.predict(X_eval)
+    env_pred_eval = env_model.predict(X_eval)
+
+    # RESULTS — compare all three on the same eval split
+    models = [
+        ("IsoForest", iso_pred_eval),
+        ("Envelope",  env_pred_eval),
+        ("ENSEMBLE",  final_pred_eval)
+    ]
+
     summary = []
     for name, pred in models:
         summary.append({
-            "MODEL": name,
-            "ACCURACY": accuracy_score(y_test, pred),
-            "PRECISION": precision_score(y_test, pred, zero_division=0),
-            "RECALL": recall_score(y_test, pred, zero_division=0),
-            "F1-SCORE": f1_score(y_test, pred, zero_division=0)
+            "MODEL":     name,
+            "ACCURACY":  accuracy_score(y_eval, pred),
+            "PRECISION": precision_score(y_eval, pred, zero_division=0),
+            "RECALL":    recall_score(y_eval, pred, zero_division=0),
+            "F1-SCORE":  f1_score(y_eval, pred, zero_division=0)
         })
 
     summary_df = pd.DataFrame(summary)
     summary_df.to_csv(os.path.join(base_dir, "latest_results.csv"), index=False)
-    
+
     plot_final_comparison(summary)
-    plot_confusion_matrix(y_test, final_pred, "ENSEMBLE")
-    print("Pipeline Complete.")
+    plot_confusion_matrix(y_eval, final_pred_eval, "ENSEMBLE")
+
+    print("\n=== FINAL RESULTS ===")
+    print(summary_df.to_string(index=False))
+    print("\nPipeline Complete.")
 
 if __name__ == "__main__":
     main()

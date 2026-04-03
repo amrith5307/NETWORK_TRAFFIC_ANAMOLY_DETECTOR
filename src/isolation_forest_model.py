@@ -6,12 +6,14 @@ import datetime
 from sklearn.ensemble import IsolationForest
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
+
 class IsolationForestModel:
-    def __init__(self, n_estimators=300, contamination=0.3): # Changed: 0.1 -> 0.3
+    def __init__(self, n_estimators=200, contamination=0.46):
         self.model = IsolationForest(
             n_estimators=n_estimators,
             contamination=contamination,
-            random_state=42
+            random_state=42,
+            n_jobs=-1
         )
 
     def train(self, X):
@@ -32,22 +34,24 @@ class IsolationForestModel:
         print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}")
         print(classification_report(y_test, y_pred, zero_division=0))
 
-        # Confusion Matrix
         cm = confusion_matrix(y_test, y_pred)
         plt.figure(figsize=(6, 5))
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", 
-                    xticklabels=["Normal", "Attack"], yticklabels=["Normal", "Attack"])
+        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+                    xticklabels=["Normal", "Attack"],
+                    yticklabels=["Normal", "Attack"])
         plt.title("Isolation Forest Confusion Matrix")
         plt.tight_layout()
         plt.savefig(os.path.join(save_dir, f"iso_forest_cm_{timestamp}.png"))
         plt.close()
 
-        # Decision Scores Plot
+        # CHANGED: overlay normal vs attack score distributions for better insight
         scores = self.model.decision_function(X_test)
         plt.figure(figsize=(6, 5))
-        plt.hist(scores, bins=50, color='skyblue', edgecolor='black')
-        # Scores below 0 are typically flagged as anomalies by SKLearn
-        plt.axvline(0, color='red', linestyle='--', label='Anomaly Threshold')
+        plt.hist(scores[np.array(y_test) == 0], bins=50, alpha=0.6,
+                 color='steelblue', label='Normal')
+        plt.hist(scores[np.array(y_test) == 1], bins=50, alpha=0.6,
+                 color='tomato', label='Attack')
+        plt.axvline(0, color='black', linestyle='--', label='Default threshold')
         plt.title("Isolation Forest Decision Scores")
         plt.legend()
         plt.tight_layout()
